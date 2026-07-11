@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Flower2 } from "lucide-react";
 import StarRating from "./StarRating";
+import { useAppData } from "../context/AppDataContext";
 import { CATEGORIES } from "../data/sampleFeedback";
 
-export default function GuestSurvey({ onSubmit }) {
+export default function GuestSurvey() {
+  const { submitFeedback, hotelDetails } = useAppData();
   const [ratings, setRatings] = useState(Object.fromEntries(CATEGORIES.map((c) => [c, 0])));
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -11,9 +13,7 @@ export default function GuestSurvey({ onSubmit }) {
   const allRated = CATEGORIES.every((c) => ratings[c] > 0);
 
   function handleSubmit() {
-    onSubmit({
-      id: `f${Date.now()}`,
-      date: new Date().toISOString(),
+    submitFeedback({
       ratings,
       comment: comment.trim() || "No written comment provided.",
     });
@@ -36,7 +36,7 @@ export default function GuestSurvey({ onSubmit }) {
     <div className="max-w-md mx-auto px-5 py-10">
       <div className="text-center mb-8">
         <Flower2 className="mx-auto text-rose" size={28} />
-        <h1 className="font-display text-2xl text-plum mt-2">The Northgate Inn</h1>
+        <h1 className="font-display text-2xl text-plum mt-2">{hotelDetails?.name}</h1>
         <p className="text-ink/55 mt-1">How was your stay with us?</p>
       </div>
 

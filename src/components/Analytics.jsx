@@ -1,3 +1,5 @@
+import { AlertTriangle } from "lucide-react";
+import { useAppData } from "../context/AppDataContext";
 import { formatINR } from "../data/billingEngine";
 import { CATEGORIES as FEEDBACK_CATEGORIES } from "../data/sampleFeedback";
 
@@ -21,7 +23,9 @@ function overallFeedback(entry) {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-export default function Analytics({ feedback, bills }) {
+export default function Analytics() {
+  const { bills, feedback, inventory } = useAppData();
+
   const totalRevenue = bills.reduce((sum, b) => sum + b.total, 0);
   const totalTax = bills.reduce((sum, b) => sum + b.totalTax, 0);
   const avgBill = bills.length ? totalRevenue / bills.length : 0;
@@ -29,7 +33,7 @@ export default function Analytics({ feedback, bills }) {
   const revenueByCategory = {};
   bills.forEach((b) =>
     b.lines.forEach((l) => {
-      revenueByCategory[l.category] = (revenueByCategory[l.category] || 0) + l.price * l.qty;
+      revenueByCategory[l.category || "Other"] = (revenueByCategory[l.category || "Other"] || 0) + l.price * l.qty;
     })
   );
   const maxCategoryRevenue = Math.max(1, ...Object.values(revenueByCategory));
@@ -51,10 +55,12 @@ export default function Analytics({ feedback, bills }) {
       : 0,
   }));
 
+  const lowStock = inventory.filter((i) => Number(i.quantity) <= Number(i.reorder_level));
+
   return (
     <div className="max-w-2xl mx-auto px-5 py-10">
       <h1 className="font-display text-2xl text-plum">Analytics</h1>
-      <p className="text-ink/55 mt-1 mb-6">Revenue and guest experience, at a glance</p>
+      <p className="text-ink/55 mt-1 mb-6">Revenue, guest experience, and stock — at a glance</p>
 
       <div className="grid grid-cols-3 gap-3 mb-8">
         <div className="bg-white border border-line rounded-xl p-4">
@@ -93,7 +99,7 @@ export default function Analytics({ feedback, bills }) {
         )}
       </div>
 
-      <div className="bg-white border border-line rounded-xl p-5">
+      <div className="bg-white border border-line rounded-xl p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-medium text-ink">Guest feedback by category</p>
           <span className="font-display text-plum">{avgRating.toFixed(1)} / 5 overall</span>
@@ -108,6 +114,25 @@ export default function Analytics({ feedback, bills }) {
             color="bg-sage"
           />
         ))}
+      </div>
+
+      <div className="bg-white border border-line rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle size={16} className="text-amber" />
+          <p className="text-sm font-medium text-ink">Low stock ({lowStock.length})</p>
+        </div>
+        {lowStock.length === 0 ? (
+          <p className="text-sm text-ink/40">Everything is above its reorder level.</p>
+        ) : (
+          <div className="space-y-2">
+            {lowStock.map((i) => (
+              <div key={i.id} className="flex justify-between text-sm">
+                <span className="text-ink/70">{i.name} <span className="text-ink/35">({i.category})</span></span>
+                <span className="text-amber font-medium">{i.quantity} {i.unit} left</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

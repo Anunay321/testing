@@ -1,4 +1,5 @@
 import { AlertCircle } from "lucide-react";
+import { useAppData } from "../context/AppDataContext";
 import { CATEGORIES } from "../data/sampleFeedback";
 
 function average(entries, cat) {
@@ -17,7 +18,8 @@ function fmtDate(iso) {
     " · " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
-export default function FrontDesk({ feedback }) {
+export default function FrontDesk() {
+  const { feedback } = useAppData();
   const overallAvg = feedback.length
     ? (feedback.reduce((sum, e) => sum + overall(e), 0) / feedback.length).toFixed(1)
     : "–";
@@ -59,7 +61,7 @@ export default function FrontDesk({ feedback }) {
               className={`bg-white border rounded-xl p-4 ${isLow ? "border-rose/50" : "border-line"}`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs text-ink/40">{fmtDate(e.date)}</span>
+                <span className="text-xs text-ink/40">{fmtDate(e.created_at)}</span>
                 <span className="font-display text-plum">{overall(e).toFixed(1)} / 5</span>
               </div>
               <p className="text-sm text-ink mt-2 leading-snug">{e.comment}</p>

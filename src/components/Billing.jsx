@@ -1,63 +1,69 @@
 import { useState } from "react";
-import { Plus, Minus, Trash2, Receipt as ReceiptIcon } from "lucide-react";
-import { CHARGE_ITEMS, PAYMENT_METHODS } from "../data/billingCatalog";
-import { computeBillTotals, formatINR } from "../data/billingEngine";
-import Receipt from "./Receipt";
+import { Plus, Minus, Trash2, FileText } from "lucide-react";
+import { useAppData } from "../context/AppDataContext";
+import { formatINR } from "../data/billingEngine";
+import { PAYMENT_METHODS } from "../data/hotelConfig";
+import Invoice from "./Invoice";
 
-const CATEGORIES = ["Room", "Restaurant", "Services"];
+const SOURCES = ["Room", "Restaurant", "Banquet", "Offers"];
 
-export default function Billing({ onComplete }) {
+export default function Billing() {
+  const { roomTypes, menuItems, banquetHalls, offers, completeBill } = useAppData();
+
+  const [source, setSource] = useState("Room");
   const [roomNumber, setRoomNumber] = useState("");
-  const [cart, setCart] = useState([]);
-  const [step, setStep] = useState("bill"); // bill | payment | receipt
+  const [guestName, setGuestName] = useState("");
+  const [cart, setCart] = useState([]); // [{ id, name, sac, price, taxRate, qty }]
+  const [step, setStep] = useState("bill"); // bill | payment | invoice
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [completedBill, setCompletedBill] = useState(null);
 
-  const totals = computeBillTotals(cart);
+  const catalogFor = { Room: roomTypes, Restaurant: menuItems, Banquet: banquetHalls, Offers: offers };
+  const activeCatalog = catalogFor[source];
+
+  const subtotal = cart.reduce((s, l) => s + l.price * l.qty, 0);
+  const tax = cart.reduce((s, l) => s + l.price * l.qty * (l.taxRate / 100), 0);
+  const total = subtotal + tax;
 
   function addItem(item) {
     setCart((prev) => {
-      const existing = prev.find((l) => l.item.id === item.id);
-      if (existing) return prev.map((l) => (l.item.id === item.id ? { ...l, qty: l.qty + 1 } : l));
-      return [...prev, { item, qty: 1 }];
+      const existing = prev.find((l) => l.id === item.id);
+      if (existing) return prev.map((l) => (l.id === item.id ? { ...l, qty: l.qty + 1 } : l));
+      return [...prev, { id: item.id, name: item.name, sac: item.sac, price: Number(item.price), taxRate: Number(item.tax_rate), qty: 1, category: source }];
     });
   }
 
   function updateQty(id, qty) {
     if (qty <= 0) {
-      setCart((prev) => prev.filter((l) => l.item.id !== id));
+      setCart((prev) => prev.filter((l) => l.id !== id));
       return;
     }
-    setCart((prev) => prev.map((l) => (l.item.id === id ? { ...l, qty } : l)));
+    setCart((prev) => prev.map((l) => (l.id === id ? { ...l, qty } : l)));
   }
 
-  function completeBill() {
-    const bill = {
-      id: `B${Date.now()}`,
-      date: new Date().toISOString(),
-      roomNumber: roomNumber || "—",
-      paymentMethod,
-      lines: cart.map((l) => ({ name: l.item.name, price: l.item.price, qty: l.qty, taxRate: l.item.taxRate, category: l.item.category })),
-      ...totals,
-    };
-    onComplete(bill);
+  function handleComplete() {
+    const bill = completeBill({ roomNumber, guestName, paymentMethod, lines: cart });
     setCompletedBill(bill);
-    setStep("receipt");
+    setStep("invoice");
   }
 
   function startNew() {
     setCart([]);
     setRoomNumber("");
+    setGuestName("");
     setPaymentMethod("Cash");
     setStep("bill");
     setCompletedBill(null);
   }
 
-  if (step === "receipt" && completedBill) {
+  if (step === "invoice" && completedBill) {
     return (
-      <div className="max-w-md mx-auto px-5 py-10">
-        <h1 className="font-display text-2xl text-plum mb-4">Bill complete</h1>
-        <Receipt bill={completedBill} />
+      <div className="max-w-2xl mx-auto px-5 py-10">
+        <div className="flex items-center gap-2 text-plum mb-4">
+          <FileText size={18} />
+          <h1 className="font-display text-2xl">Invoice generated</h1>
+        </div>
+        <Invoice bill={completedBill} />
         <button
           onClick={startNew}
           className="w-full mt-4 bg-plum text-cream text-sm font-semibold rounded-xl py-3.5"
@@ -69,96 +75,123 @@ export default function Billing({ onComplete }) {
   }
 
   return (
-    <div className="max-w-md mx-auto px-5 py-10">
+    <div className="max-w-2xl mx-auto px-5 py-10">
       <h1 className="font-display text-2xl text-plum">Billing</h1>
-      <p className="text-ink/55 mt-1 mb-5">Add charges and settle a guest's bill</p>
+      <p className="text-ink/55 mt-1 mb-5">Room, restaurant, banquet, and offer charges — one invoice</p>
 
-      <input
-        value={roomNumber}
-        onChange={(e) => setRoomNumber(e.target.value)}
-        placeholder="Room number"
-        className="w-full text-sm bg-white border border-line rounded-xl px-3.5 py-2.5 outline-none mb-5"
-      />
+      <div className="grid grid-cols-2 gap-2 mb-5">
+        <input
+          value={guestName}
+          onChange={(e) => setGuestName(e.target.value)}
+          placeholder="Guest name"
+          className="text-sm bg-white border border-line rounded-xl px-3.5 py-2.5 outline-none"
+        />
+        <input
+          value={roomNumber}
+          onChange={(e) => setRoomNumber(e.target.value)}
+          placeholder="Room number"
+          className="text-sm bg-white border border-line rounded-xl px-3.5 py-2.5 outline-none"
+        />
+      </div>
 
       {step === "bill" && (
-        <>
-          {CATEGORIES.map((cat) => (
-            <div key={cat} className="mb-4">
-              <p className="text-xs uppercase tracking-wide text-ink/40 mb-2">{cat}</p>
-              <div className="grid grid-cols-1 gap-2">
-                {CHARGE_ITEMS.filter((i) => i.category === cat).map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => addItem(item)}
-                    className="flex items-center justify-between bg-white border border-line rounded-xl px-4 py-3 text-left hover:border-rose transition-colors"
-                  >
-                    <span className="text-sm text-ink">{item.name}</span>
-                    <span className="text-sm font-medium text-plum">{formatINR(item.price)}</span>
-                  </button>
-                ))}
-              </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {SOURCES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSource(s)}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                    source === s ? "bg-plum text-cream border-plum" : "border-line text-ink/60"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
-          ))}
-
-          {cart.length > 0 && (
-            <div className="mt-6 bg-white border border-line rounded-xl p-4">
-              <p className="text-xs uppercase tracking-wide text-ink/40 mb-3">Current bill</p>
-              <div className="space-y-2.5">
-                {cart.map((l) => (
-                  <div key={l.item.id} className="flex items-center justify-between">
-                    <span className="text-sm text-ink truncate">{l.item.name}</span>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => updateQty(l.item.id, l.qty - 1)} className="w-6 h-6 rounded border border-line flex items-center justify-center text-ink/60">
-                        <Minus size={12} />
-                      </button>
-                      <span className="text-sm font-mono w-4 text-center">{l.qty}</span>
-                      <button onClick={() => updateQty(l.item.id, l.qty + 1)} className="w-6 h-6 rounded border border-line flex items-center justify-center text-ink/60">
-                        <Plus size={12} />
-                      </button>
-                      <button onClick={() => updateQty(l.item.id, 0)} className="w-6 h-6 rounded flex items-center justify-center text-rose/70">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
+            <div className="space-y-2">
+              {activeCatalog.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => addItem(item)}
+                  className="w-full flex items-center justify-between bg-white border border-line rounded-xl px-4 py-3 text-left hover:border-rose transition-colors"
+                >
+                  <div>
+                    <p className="text-sm text-ink">{item.name}</p>
+                    {item.description && <p className="text-xs text-ink/40 mt-0.5">{item.description}</p>}
                   </div>
-                ))}
-              </div>
-
-              <div className="border-t border-line mt-3 pt-3 space-y-1 text-sm">
-                <div className="flex justify-between text-ink/60">
-                  <span>Subtotal</span>
-                  <span>{formatINR(totals.subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-ink/60">
-                  <span>CGST + SGST</span>
-                  <span>{formatINR(totals.totalTax)}</span>
-                </div>
-                <div className="flex justify-between font-display text-plum text-base pt-1 border-t border-line mt-1">
-                  <span>Total</span>
-                  <span>{formatINR(totals.total)}</span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setStep("payment")}
-                className="w-full mt-4 bg-plum text-cream text-sm font-semibold rounded-xl py-3"
-              >
-                Charge {formatINR(totals.total)}
-              </button>
+                  <span className="text-sm font-medium text-plum shrink-0 ml-2">{formatINR(item.price)}</span>
+                </button>
+              ))}
+              {activeCatalog.length === 0 && (
+                <p className="text-sm text-ink/40 py-6 text-center">
+                  Nothing set up here yet — add items in the Admin panel.
+                </p>
+              )}
             </div>
-          )}
-        </>
+          </div>
+
+          <div className="bg-white border border-line rounded-xl p-4 h-fit lg:sticky lg:top-20">
+            <p className="text-xs uppercase tracking-wide text-ink/40 mb-3">Current bill</p>
+            {cart.length === 0 ? (
+              <p className="text-sm text-ink/40">Tap an item on the left to add it.</p>
+            ) : (
+              <>
+                <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+                  {cart.map((l) => (
+                    <div key={l.id} className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-ink truncate">{l.name}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button onClick={() => updateQty(l.id, l.qty - 1)} className="w-6 h-6 rounded border border-line flex items-center justify-center text-ink/60">
+                          <Minus size={12} />
+                        </button>
+                        <span className="text-sm font-mono w-4 text-center">{l.qty}</span>
+                        <button onClick={() => updateQty(l.id, l.qty + 1)} className="w-6 h-6 rounded border border-line flex items-center justify-center text-ink/60">
+                          <Plus size={12} />
+                        </button>
+                        <button onClick={() => updateQty(l.id, 0)} className="w-6 h-6 rounded flex items-center justify-center text-rose/70">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-line mt-3 pt-3 space-y-1 text-sm">
+                  <div className="flex justify-between text-ink/60">
+                    <span>Subtotal</span>
+                    <span>{formatINR(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-ink/60">
+                    <span>CGST + SGST</span>
+                    <span>{formatINR(tax)}</span>
+                  </div>
+                  <div className="flex justify-between font-display text-plum text-base pt-1 border-t border-line mt-1">
+                    <span>Total</span>
+                    <span>{formatINR(total)}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setStep("payment")}
+                  className="w-full mt-4 bg-plum text-cream text-sm font-semibold rounded-xl py-3"
+                >
+                  Charge {formatINR(total)}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {step === "payment" && (
-        <div className="bg-white border border-line rounded-xl p-5">
-          <div className="flex items-center gap-2 text-plum mb-3">
-            <ReceiptIcon size={16} />
-            <p className="text-xs uppercase tracking-wide font-medium">Take payment</p>
-          </div>
+        <div className="max-w-md bg-white border border-line rounded-xl p-5">
+          <p className="text-xs uppercase tracking-wide font-medium text-plum mb-3">Take payment</p>
           <p className="text-sm text-ink/60 mb-4">
-            Total due: <span className="font-display text-plum text-lg">{formatINR(totals.total)}</span>
+            Total due: <span className="font-display text-plum text-lg">{formatINR(total)}</span>
           </p>
-          <div className="grid grid-cols-3 gap-2 mb-5">
+          <div className="grid grid-cols-2 gap-2 mb-5">
             {PAYMENT_METHODS.map((m) => (
               <button
                 key={m}
@@ -175,8 +208,8 @@ export default function Billing({ onComplete }) {
             <button onClick={() => setStep("bill")} className="flex-1 text-sm font-medium py-3 rounded-xl border border-line text-ink/60">
               Back
             </button>
-            <button onClick={completeBill} className="flex-[2] bg-plum text-cream text-sm font-semibold rounded-xl py-3">
-              Complete bill
+            <button onClick={handleComplete} className="flex-[2] bg-plum text-cream text-sm font-semibold rounded-xl py-3">
+              Generate invoice
             </button>
           </div>
         </div>

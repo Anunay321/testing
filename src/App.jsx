@@ -1,28 +1,29 @@
 import { useState } from "react";
+import { AppDataProvider, useAppData } from "./context/AppDataContext";
 import GuestSurvey from "./components/GuestSurvey";
 import FrontDesk from "./components/FrontDesk";
 import Billing from "./components/Billing";
 import Analytics from "./components/Analytics";
-import { SAMPLE_FEEDBACK } from "./data/sampleFeedback";
+import AdminPanel from "./components/admin/AdminPanel";
 
 const TABS = [
   { id: "survey", label: "Guest Survey" },
   { id: "desk", label: "Front Desk" },
   { id: "billing", label: "Billing" },
   { id: "analytics", label: "Analytics" },
+  { id: "admin", label: "Admin" },
 ];
 
-export default function App() {
+function AppShell() {
   const [view, setView] = useState("survey");
-  const [feedback, setFeedback] = useState(SAMPLE_FEEDBACK);
-  const [bills, setBills] = useState([]);
+  const { loading } = useAppData();
 
-  function handleFeedbackSubmit(entry) {
-    setFeedback((prev) => [entry, ...prev]);
-  }
-
-  function handleBillComplete(bill) {
-    setBills((prev) => [bill, ...prev]);
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-ink/40 text-sm">Loading…</p>
+      </div>
+    );
   }
 
   return (
@@ -41,10 +42,19 @@ export default function App() {
         ))}
       </div>
 
-      {view === "survey" && <GuestSurvey onSubmit={handleFeedbackSubmit} />}
-      {view === "desk" && <FrontDesk feedback={feedback} />}
-      {view === "billing" && <Billing onComplete={handleBillComplete} />}
-      {view === "analytics" && <Analytics feedback={feedback} bills={bills} />}
+      {view === "survey" && <GuestSurvey />}
+      {view === "desk" && <FrontDesk />}
+      {view === "billing" && <Billing />}
+      {view === "analytics" && <Analytics />}
+      {view === "admin" && <AdminPanel />}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AppDataProvider>
+      <AppShell />
+    </AppDataProvider>
   );
 }
