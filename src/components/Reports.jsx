@@ -1,9 +1,58 @@
 import { useEffect, useState } from "react";
+import { Moon } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAppData } from "../context/AppDataContext";
 import { formatINR } from "../data/billingEngine";
 
 const SECTIONS = ["Daily Sales", "Tax Summary", "Sales by Room Type", "Receipt Register", "Daybook", "Closed Bills", "High Bill", "Meal Plan List", "City Ledger"];
+
+// Room tariffs post automatically at 2 AM IST via a scheduled database job,
+// but front desk can trigger the same run manually here — e.g. to catch a
+// same-day checkout before the overnight job has run, or to verify it worked.
+function NightAuditPanel() {
+  const { hotelDetails, runNightAudit, activeFolios } = useAppData();
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const lastRun = hotelDetails?.last_night_audit_date;
+  const today = new Date().toISOString().slice(0, 10);
+  const ranToday = lastRun === today;
+
+  async function handleRun() {
+    setRunning(true);
+    const { data, error } = await runNightAudit();
+    setRunning(false);
+    setResult(error ? { error: error.message } : data);
+  }
+
+  return (
+    <div className="bg-white border border-line rounded-xl p-4 mb-5 flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center gap-2.5">
+        <Moon size={16} className="text-plum shrink-0" />
+        <div>
+          <p className="text-sm font-medium text-ink">
+            Night Audit — {ranToday ? "already run today" : "not yet run today"}
+          </p>
+          <p className="text-xs text-ink/45">
+            {activeFolios.length} active {activeFolios.length === 1 ? "folio" : "folios"} · Last run: {lastRun || "never"}
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={handleRun}
+        disabled={running}
+        className="text-xs font-medium bg-plum text-cream rounded-lg px-3.5 py-2 disabled:opacity-50 shrink-0"
+      >
+        {running ? "Running…" : "Run Night Audit now"}
+      </button>
+      {result && (
+        <p className={`text-xs w-full ${result.error ? "text-rose" : "text-sage"}`}>
+          {result.error || `${result.status}: ${result.folios_charged ?? 0} room tariff(s) posted for ${result.date}.`}
+        </p>
+      )}
+    </div>
+  );
+}
 const DEPARTMENTS = ["Room", "Restaurant", "Banquet", "Offers"];
 const PAY_MODES = ["Cash", "UPI", "Card", "Corporate Billing"];
 
@@ -505,6 +554,8 @@ export default function Reports() {
     <div className="max-w-3xl mx-auto px-5 py-10">
       <h1 className="font-display text-2xl text-plum">Reports</h1>
       <p className="text-ink/55 mt-1 mb-5">Daily sales, cash reconciliation, meal counts, and corporate accounts</p>
+
+      <NightAuditPanel />
 
       <div className="flex flex-wrap gap-1.5 mb-5">
         {SECTIONS.map((s) => (

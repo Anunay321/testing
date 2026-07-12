@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut, FileText } from "lucide-react";
 import { useAppData } from "../context/AppDataContext";
 import { formatINR } from "../data/billingEngine";
+import Invoice from "./Invoice";
 
 const PAY_METHODS = ["Cash", "UPI", "Card"];
 
@@ -11,7 +12,8 @@ export default function CheckOut() {
   const [balance, setBalance] = useState(null);
   const [payMethod, setPayMethod] = useState("Cash");
   const [settlement, setSettlement] = useState("pay");
-  const [done, setDone] = useState(false);
+  const [completedBill, setCompletedBill] = useState(null);
+  const [checkingOut, setCheckingOut] = useState(false);
 
   const folio = activeFolios.find((f) => f.id === folioId);
 
@@ -21,13 +23,34 @@ export default function CheckOut() {
   }, [folioId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCheckOut() {
-    await checkOut(folioId, { settlement, paymentMode: settlement === "pay" ? payMethod : "Corporate Billing" });
-    setDone(true);
-    setTimeout(() => {
-      setDone(false);
-      setFolioId("");
-      setBalance(null);
-    }, 1800);
+    setCheckingOut(true);
+    const bill = await checkOut(folioId, { settlement, paymentMode: settlement === "pay" ? payMethod : "Corporate Billing" });
+    setCheckingOut(false);
+    setCompletedBill(bill);
+  }
+
+  function startNew() {
+    setCompletedBill(null);
+    setFolioId("");
+    setBalance(null);
+    setSettlement("pay");
+    setPayMethod("Cash");
+  }
+
+  if (completedBill) {
+    return (
+      <div className="max-w-2xl mx-auto px-5 py-10">
+        <div className="flex items-center gap-2 text-plum mb-1">
+          <FileText size={18} />
+          <h1 className="font-display text-2xl">Checked out — here's the bill</h1>
+        </div>
+        <p className="text-ink/55 mb-4">Room marked Dirty for housekeeping. Print or download the tax invoice below.</p>
+        <Invoice bill={completedBill} />
+        <button onClick={startNew} className="w-full mt-4 bg-plum text-cream text-sm font-semibold rounded-xl py-3.5">
+          Check out another guest
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -38,12 +61,7 @@ export default function CheckOut() {
       </div>
       <p className="text-ink/55 mb-5">Settle a folio and close out the stay</p>
 
-      {done ? (
-        <div className="bg-sage-soft border border-sage rounded-xl p-6 text-center text-sage font-medium">
-          Checked out — folio settled, room marked Dirty for housekeeping.
-        </div>
-      ) : (
-        <>
+      <>
           <select
             value={folioId}
             onChange={(e) => setFolioId(e.target.value)}
@@ -122,14 +140,14 @@ export default function CheckOut() {
 
               <button
                 onClick={handleCheckOut}
-                className="w-full bg-plum text-cream text-sm font-semibold rounded-xl py-3.5"
+                disabled={checkingOut}
+                className="w-full bg-plum text-cream text-sm font-semibold rounded-xl py-3.5 disabled:opacity-50"
               >
-                Complete check-out
+                {checkingOut ? "Generating invoice…" : "Complete check-out"}
               </button>
             </div>
           )}
         </>
-      )}
     </div>
   );
 }

@@ -5,7 +5,12 @@ import { useAppData } from "../context/AppDataContext";
 import { exportInvoicePdf } from "../lib/exportInvoicePdf";
 
 function fmtDate(iso) {
+  if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+function fmtTime(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function Invoice({ bill }) {
@@ -30,15 +35,19 @@ export default function Invoice({ bill }) {
         <p className="text-xs font-semibold text-ink tracking-widest mt-2">TAX INVOICE</p>
       </div>
 
-      <div className="flex justify-between text-xs text-ink/70 mb-4">
-        <div>
-          <p><span className="text-ink/45">Invoice No: </span>{bill.invoiceNumber}</p>
-          <p><span className="text-ink/45">Date: </span>{fmtDate(bill.date)}</p>
-        </div>
-        <div className="text-right">
-          <p><span className="text-ink/45">Billed to: </span>{bill.guestName}</p>
-          <p><span className="text-ink/45">Room: </span>{bill.roomNumber}</p>
-        </div>
+      {/* Header block — mirrors the legacy Bill No / Company / Meal Plan / Arr-Dep / Mode of Payment layout */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-ink/70 mb-4 pb-4 border-b border-line">
+        <p><span className="text-ink/45 inline-block w-28">Bill No.</span>{bill.invoiceNumber}</p>
+        <p><span className="text-ink/45 inline-block w-28">Meal Plan</span>{bill.mealPlan || "EP"}</p>
+        <p><span className="text-ink/45 inline-block w-28">Name</span>{bill.guestName}</p>
+        <p><span className="text-ink/45 inline-block w-28">Arr. Date</span>{fmtDate(bill.checkInDate)} {fmtTime(bill.checkInDate)}</p>
+        {bill.companyName && (
+          <p><span className="text-ink/45 inline-block w-28">Company</span>{bill.companyName}</p>
+        )}
+        <p><span className="text-ink/45 inline-block w-28">Dep. Date</span>{fmtDate(bill.date)} {fmtTime(bill.date)}</p>
+        <p><span className="text-ink/45 inline-block w-28">Room No.</span>{bill.roomNumber}</p>
+        <p><span className="text-ink/45 inline-block w-28">Mode of Payment</span>{bill.paymentMethod}</p>
+        <p><span className="text-ink/45 inline-block w-28">Pax</span>Adult {bill.adults ?? 1} / Child {bill.children ?? 0}</p>
       </div>
 
       <table className="w-full text-xs border-collapse">
@@ -83,20 +92,28 @@ export default function Invoice({ bill }) {
       <div className="flex justify-end mt-3">
         <div className="w-56 space-y-1">
           <div className="flex justify-between text-ink/60">
-            <span>Subtotal</span>
+            <span>Sub Total</span>
             <span>{formatINR(bill.subtotal)}</span>
           </div>
           <div className="flex justify-between text-ink/60">
-            <span>Total CGST</span>
+            <span>CGST</span>
             <span>{formatINR(bill.cgst)}</span>
           </div>
           <div className="flex justify-between text-ink/60">
-            <span>Total SGST</span>
+            <span>SGST</span>
             <span>{formatINR(bill.sgst)}</span>
           </div>
           <div className="flex justify-between font-display text-plum text-base pt-1.5 border-t border-line">
-            <span>Grand Total</span>
+            <span>Total</span>
             <span>{formatINR(bill.total)}</span>
+          </div>
+          <div className="flex justify-between text-ink/60 pt-1.5 border-t border-dashed border-line">
+            <span>Currently Settled</span>
+            <span>{formatINR(bill.total)}</span>
+          </div>
+          <div className="flex justify-between font-semibold text-ink">
+            <span>Balance</span>
+            <span>{formatINR(0)}</span>
           </div>
         </div>
       </div>

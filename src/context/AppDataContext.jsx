@@ -119,13 +119,20 @@ export function AppDataProvider({ children }) {
   }
 
   // Finds the CGST/SGST tax_master rows matching an item's total tax rate
-  // (e.g. 12% total -> two 6% rows; 18% -> two 9% rows; 5% -> two 2.5% rows).
-  function matchTaxRows(totalRate) {
+  // AND its department. Several departments share the same rate (Room,
+  // Restaurant, and Offers are all 5% => 2.5%+2.5%) so matching on rate alone
+  // silently cross-tags transactions to the wrong GL account — this keeps the
+  // category-wise Tax Report accurate even though the money collected is
+  // identical either way.
+  const CATEGORY_KEYWORDS = { Room: "Room Tariff", Offers: "Room Tariff", Restaurant: "Restaurant", Banquet: "Banquet" };
+  function matchTaxRows(totalRate, category) {
     const half = totalRate / 2;
-    const matches = taxMaster.filter((t) => Number(t.tax_rate) === half);
-    const cgst = matches.find((t) => t.tax_name.startsWith("CGST"));
-    const sgst = matches.find((t) => t.tax_name.startsWith("SGST"));
-    return { cgst, sgst };
+    const candidates = taxMaster.filter((t) => Number(t.tax_rate) === half);
+    const keyword = CATEGORY_KEYWORDS[category];
+    const pick = (prefix) =>
+      (keyword && candidates.find((t) => t.tax_name.startsWith(prefix) && t.tax_name.includes(keyword))) ||
+      candidates.find((t) => t.tax_name.startsWith(prefix));
+    return { cgst: pick("CGST"), sgst: pick("SGST") };
   }
 
   function nextInvoiceNumber() {
@@ -159,7 +166,7 @@ export function AppDataProvider({ children }) {
 
       if (txn) {
         const lineTax = line.price * line.qty * (line.taxRate / 100);
-        const { cgst, sgst } = matchTaxRows(line.taxRate);
+        const { cgst, sgst } = matchTaxRows(line.taxRate, line.category);
         const taxRows = [];
         if (cgst) taxRows.push({ transaction_id: txn.id, tax_master_id: cgst.id, tax_amount: lineTax / 2 });
         if (sgst) taxRows.push({ transaction_id: txn.id, tax_master_id: sgst.id, tax_amount: lineTax / 2 });
@@ -214,13 +221,69 @@ export function AppDataProvider({ children }) {
     return data.reduce((bal, t) => bal + (t.entry_type === "Debit" ? Number(t.amount) : -Number(t.amount)), 0);
   }
 
+  // Reconstructs an itemized, Invoice-ready bill from every Debit transaction
+  // ever posted to a folio (Night Audit room tariffs, Room Charges for
+  // restaurant/banquet, etc.) plus each line's tax split — so checkout always
+  // produces a real tax invoice, not just a "settled" message.
+  async function buildFolioInvoice(folioId, invoiceNumber, folio, paymentLabel) {
+    const { data: rows } = await supabase
+      .from("transactions")
+      .select("*, transaction_taxes(tax_amount)")
+      .eq("folio_id", folioId)
+      .order("created_at", { ascending: true });
+
+    const debits = (rows || []).filter((t) => t.entry_type === "Debit");
+    const lineTax = (t) => (t.transaction_taxes || []).reduce((s, tt) => s + Number(tt.tax_amount), 0);
+
+    const lines = debits.map((t) => {
+      const qty = Number(t.qty) || 1;
+      const amount = Number(t.amount);
+      const tax = lineTax(t);
+      return {
+        name: t.description,
+        sac: t.hsn_sac || "",
+        qty,
+        price: qty ? amount / qty : amount,
+        taxRate: amount > 0 ? Math.round((tax / amount) * 1000) / 10 : 0,
+      };
+    });
+
+    const subtotal = debits.reduce((s, t) => s + Number(t.amount), 0);
+    const totalTax = debits.reduce((s, t) => s + lineTax(t), 0);
+    const cgstTotal = Math.round((totalTax / 2) * 100) / 100;
+    const sgstTotal = Math.round((totalTax - cgstTotal) * 100) / 100;
+
+    return {
+      id: folioId,
+      invoiceNumber,
+      date: new Date().toISOString(),
+      checkInDate: folio?.check_in_date,
+      roomNumber: folio?.room_number || "—",
+      guestName: folio?.guest_name || "Guest",
+      companyName: folio?.companies?.company_name || null,
+      mealPlan: folio?.meal_plan,
+      adults: folio?.adults,
+      children: folio?.children,
+      paymentMethod: paymentLabel,
+      lines,
+      subtotal,
+      cgst: cgstTotal,
+      sgst: sgstTotal,
+      totalTax,
+      total: subtotal + totalTax,
+    };
+  }
+
   // Settle a folio at checkout: either direct payment, or transfer to the
   // company's City Ledger (Accounts Receivable) for later corporate billing.
+  // Returns the completed, itemized invoice so the front desk can show/print
+  // it immediately instead of just a confirmation toast.
   async function checkOut(folioId, { settlement, paymentMode }) {
     const balance = await folioBalance(folioId);
     const folio = activeFolios.find((f) => f.id === folioId);
     const invoiceNumber = nextInvoiceNumber();
     const receiptNumber = nextReceiptNumber();
+    let paymentLabel = paymentMode;
 
     if (settlement === "pay" && balance > 0) {
       await supabase.from("transactions").insert({
@@ -251,13 +314,35 @@ export function AppDataProvider({ children }) {
         amount: balance,
         entry_type: "Debit",
       });
+      paymentLabel = `Billed to ${folio?.companies?.company_name || "Company"} (City Ledger)`;
+    } else if (balance <= 0) {
+      paymentLabel = "Already settled";
     }
 
     await supabase.from("folios").update({ status: "Settled", check_out_date: new Date().toISOString() }).eq("id", folioId);
     const room = rooms.find((r) => r.room_number === folio?.room_number);
     if (room) await supabase.from("rooms").update({ status: "Dirty" }).eq("id", room.id);
     await setHotelDetails({ invoice_seq: (hotelDetails?.invoice_seq ?? 1001) + 1 });
+
+    const bill = await buildFolioInvoice(folioId, invoiceNumber, folio, paymentLabel);
+    setBills((prev) => [bill, ...prev]);
+
     await Promise.all([refreshRooms(), refreshActiveFolios()]);
+    return bill;
+  }
+
+  // Manually trigger the same Night Audit that runs automatically at 2 AM IST
+  // (via pg_cron) — posts the nightly room tariff + tax split to every active
+  // folio, once per calendar day. Safe to click more than once; the database
+  // function no-ops if it already ran today.
+  async function runNightAudit() {
+    const { data, error } = await supabase.rpc("run_night_audit");
+    if (!error) {
+      await Promise.all([refreshActiveFolios(), refreshRooms()]);
+      const { data: hd } = await supabase.from("hotel_details").select("*").eq("id", 1).single();
+      if (hd) setHotelDetailsState(hd);
+    }
+    return { data, error };
   }
 
   async function markRoomStatus(roomId, status) {
@@ -369,6 +454,7 @@ export function AppDataProvider({ children }) {
       postCharge,
       checkOut,
       folioBalance,
+      runNightAudit,
       feedback,
       submitFeedback,
       bills,

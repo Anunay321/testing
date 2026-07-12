@@ -1,6 +1,6 @@
 {
-  "name": "testing",
-  "description": "Guest feedback prototype — Phase 1",
+  "name": "kamala-inn-grand-pms",
+  "description": "Kamala Inn Grand Hotel \u2014 Property Management & Billing System",
   "private": true,
   "version": "0.1.0",
   "type": "module",
