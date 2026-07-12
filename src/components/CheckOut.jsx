@@ -64,6 +64,11 @@ export default function CheckOut() {
                 </p>
                 <p className="text-xs text-ink/50">Outstanding balance</p>
                 <p className="font-display text-2xl text-plum">{balance === null ? "…" : formatINR(balance)}</p>
+                {folio.security_deposit > 0 && (
+                  <p className="text-xs text-amber mt-2 bg-amber/10 rounded-lg px-2.5 py-1.5">
+                    Security deposit held: {formatINR(folio.security_deposit)} — remember to return or adjust it separately.
+                  </p>
+                )}
               </div>
 
               <div>

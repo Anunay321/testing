@@ -20,10 +20,11 @@ export default function CheckIn() {
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   const [companyId, setCompanyId] = useState("");
+  const [securityDeposit, setSecurityDeposit] = useState("");
   const [done, setDone] = useState(false);
 
   async function handleCheckIn() {
-    await checkIn({ roomId, guestName, mealPlan, adults: Number(adults), children: Number(children), companyId: companyId || null });
+    await checkIn({ roomId, guestName, mealPlan, adults: Number(adults), children: Number(children), companyId: companyId || null, securityDeposit: Number(securityDeposit) || 0 });
     setDone(true);
     setTimeout(() => {
       setDone(false);
@@ -33,6 +34,7 @@ export default function CheckIn() {
       setAdults(1);
       setChildren(0);
       setCompanyId("");
+      setSecurityDeposit("");
     }, 1600);
   }
 
@@ -132,6 +134,19 @@ export default function CheckIn() {
                 <option key={c.id} value={c.id}>{c.company_name}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-ink/60 uppercase tracking-wide">
+              Security deposit (optional)
+            </label>
+            <input
+              type="number"
+              value={securityDeposit}
+              onChange={(e) => setSecurityDeposit(e.target.value)}
+              placeholder="₹0"
+              className="w-full mt-1.5 text-sm bg-white border border-line rounded-xl px-3 py-2.5 outline-none"
+            />
           </div>
 
           <button

@@ -178,7 +178,7 @@ export function AppDataProvider({ children }) {
 
   // --- Check-in / room-folio lifecycle -------------------------------------
 
-  async function checkIn({ roomId, guestName, mealPlan, adults, children, companyId }) {
+  async function checkIn({ roomId, guestName, mealPlan, adults, children, companyId, securityDeposit }) {
     const { data: folio } = await supabase
       .from("folios")
       .insert({
@@ -190,6 +190,7 @@ export function AppDataProvider({ children }) {
         children,
         company_id: companyId || null,
         room_type_id: rooms.find((r) => r.id === roomId)?.room_type_id,
+        security_deposit: securityDeposit || 0,
       })
       .select()
       .single();
