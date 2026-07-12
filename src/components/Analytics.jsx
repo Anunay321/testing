@@ -1,7 +1,10 @@
-import { AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, FileSpreadsheet, FileDown } from "lucide-react";
 import { useAppData } from "../context/AppDataContext";
 import { formatINR } from "../data/billingEngine";
 import { CATEGORIES as FEEDBACK_CATEGORIES } from "../data/sampleFeedback";
+import { exportGstr1Excel } from "../lib/exportGstr1";
+import { exportTransactionsCsv } from "../lib/exportCsv";
 
 function BarRow({ label, value, max, formatValue, color = "bg-rose" }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
@@ -24,7 +27,28 @@ function overallFeedback(entry) {
 }
 
 export default function Analytics() {
-  const { bills, feedback, inventory } = useAppData();
+  const { bills, feedback, inventoryBalances, hotelDetails } = useAppData();
+  const [startDate, setStartDate] = useState(new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [exporting, setExporting] = useState(false);
+
+  async function handleGstrExport() {
+    setExporting(true);
+    try {
+      await exportGstr1Excel({ hotelDetails, startDate, endDate });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleCsvExport() {
+    setExporting(true);
+    try {
+      await exportTransactionsCsv(startDate, endDate);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const totalRevenue = bills.reduce((sum, b) => sum + b.total, 0);
   const totalTax = bills.reduce((sum, b) => sum + b.totalTax, 0);
@@ -55,7 +79,7 @@ export default function Analytics() {
       : 0,
   }));
 
-  const lowStock = inventory.filter((i) => Number(i.quantity) <= Number(i.reorder_level));
+  const lowStock = inventoryBalances.filter((i) => Number(i.current_stock) <= Number(i.reorder_level));
 
   return (
     <div className="max-w-2xl mx-auto px-5 py-10">
@@ -116,7 +140,7 @@ export default function Analytics() {
         ))}
       </div>
 
-      <div className="bg-white border border-line rounded-xl p-5">
+      <div className="bg-white border border-line rounded-xl p-5 mb-6">
         <div className="flex items-center gap-2 mb-3">
           <AlertTriangle size={16} className="text-amber" />
           <p className="text-sm font-medium text-ink">Low stock ({lowStock.length})</p>
@@ -126,13 +150,42 @@ export default function Analytics() {
         ) : (
           <div className="space-y-2">
             {lowStock.map((i) => (
-              <div key={i.id} className="flex justify-between text-sm">
+              <div key={i.item_id} className="flex justify-between text-sm">
                 <span className="text-ink/70">{i.name} <span className="text-ink/35">({i.category})</span></span>
-                <span className="text-amber font-medium">{i.quantity} {i.unit} left</span>
+                <span className="text-amber font-medium">{i.current_stock} {i.unit} left</span>
               </div>
             ))}
           </div>
         )}
+      </div>
+
+      <div className="bg-white border border-line rounded-xl p-5">
+        <p className="text-sm font-medium text-ink mb-1">Export & compliance</p>
+        <p className="text-xs text-ink/45 mb-4">
+          Generate real files from the ledger — a GSTR-1-ready Excel workbook (B2CS, HSN summary, and
+          documents-issued sheets, matching the official return-filing template) or a raw transactions CSV.
+        </p>
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm border border-line rounded-lg px-3 py-2 outline-none" />
+          <span className="text-ink/40 text-sm">to</span>
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="text-sm border border-line rounded-lg px-3 py-2 outline-none" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleGstrExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 text-sm font-medium bg-plum text-cream rounded-lg px-4 py-2.5 disabled:opacity-50"
+          >
+            <FileSpreadsheet size={15} /> Download GSTR-1 Excel
+          </button>
+          <button
+            onClick={handleCsvExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 text-sm font-medium border border-line text-ink/70 rounded-lg px-4 py-2.5 disabled:opacity-50"
+          >
+            <FileDown size={15} /> Download Transactions CSV
+          </button>
+        </div>
       </div>
     </div>
   );

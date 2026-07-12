@@ -1,6 +1,8 @@
+import { Download } from "lucide-react";
 import { formatINR } from "../data/billingEngine";
 import { numberToWordsINR } from "../data/numberToWords";
 import { useAppData } from "../context/AppDataContext";
+import { exportInvoicePdf } from "../lib/exportInvoicePdf";
 
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -11,6 +13,14 @@ export default function Invoice({ bill }) {
 
   return (
     <div className="bg-white border border-line rounded-xl p-6 text-sm">
+      <div className="flex justify-end mb-2">
+        <button
+          onClick={() => exportInvoicePdf(bill, hotelDetails)}
+          className="flex items-center gap-1.5 text-xs font-medium text-plum border border-plum/30 rounded-lg px-3 py-1.5 hover:bg-plum/5"
+        >
+          <Download size={13} /> Download PDF
+        </button>
+      </div>
       <div className="text-center border-b border-line pb-4 mb-4">
         <p className="font-display text-xl text-plum">{hotelDetails.name}</p>
         <p className="text-xs text-ink/55 mt-1">{hotelDetails.address}</p>

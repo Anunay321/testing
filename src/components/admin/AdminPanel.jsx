@@ -136,17 +136,17 @@ export default function AdminPanel() {
       {section === "Inventory" && (
         <>
           <p className="text-xs text-ink/45 mb-3">
-            Categories in use: {INVENTORY_CATEGORIES.join(", ")}
+            Categories in use: {INVENTORY_CATEGORIES.join(", ")}. This edits the item master (name, unit,
+            reorder threshold) — actual stock levels are tracked on the Inventory ledger page, not here.
           </p>
           <EditableTable
-            title="Inventory & stock"
+            title="Inventory item master"
             items={inventory}
             actions={inventoryActions}
             fields={[
               nameField(180),
               { key: "category", label: "Category", type: "text", width: 110 },
               { key: "unit", label: "Unit", type: "text", width: 70 },
-              { key: "quantity", label: "Quantity", type: "number", width: 80 },
               { key: "reorder_level", label: "Reorder at", type: "number", width: 90 },
             ]}
           />
